@@ -5,7 +5,10 @@ MXGA ships one Firefox MV3 artifact for desktop and Android. The generated manif
 ```json
 {
   "browser_specific_settings": {
-    "gecko": { "strict_min_version": "140.0" },
+    "gecko": {
+      "id": "x-spam-sentine@15cm.net",
+      "strict_min_version": "140.0"
+    },
     "gecko_android": { "strict_min_version": "142.0" }
   }
 }

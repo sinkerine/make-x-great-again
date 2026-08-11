@@ -17,11 +17,12 @@ test("Firefox manifest declares a separate Android compatibility floor", async (
 
   const settings = manifest.browser_specific_settings as
     | {
-        gecko?: { strict_min_version?: string };
+        gecko?: { id?: string; strict_min_version?: string };
         gecko_android?: { strict_min_version?: string };
       }
     | undefined;
 
+  assert.equal(settings?.gecko?.id, "x-spam-sentine@15cm.net");
   assert.equal(settings?.gecko?.strict_min_version, "140.0");
   assert.equal(settings?.gecko_android?.strict_min_version, "142.0");
 });

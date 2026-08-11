@@ -86,7 +86,7 @@ export default defineConfig({
       ? {
           browser_specific_settings: {
             gecko: {
-              id: "x-spam-sentinel@zuoluo.tv",
+              id: "x-spam-sentine@15cm.net",
               strict_min_version: "140.0",
               data_collection_permissions: {
                 required: ["none"],
