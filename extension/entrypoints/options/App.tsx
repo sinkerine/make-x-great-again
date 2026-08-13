@@ -932,14 +932,32 @@ function isMobileApplePlatform(): boolean {
   );
 }
 
+/** Firefox for Android has no runtime host-permission doorhanger (the
+ * prompt only exists on desktop). Site access is granted manually from the
+ * add-on's details page, so here we can only test for it, never request. */
+function isFirefoxAndroid(): boolean {
+  return (
+    import.meta.env.BROWSER === "firefox" && /Android/i.test(navigator.userAgent)
+  );
+}
+
 /** Ensure X website access before enabling a native action.
  *
  * Safari grants website access for the content script from Safari Settings;
  * its permissions.request() result does not reliably reflect that grant. If
  * the content script can run on X, the native action is a same-site request
- * and needs no second Chrome-style runtime grant. */
+ * and needs no second Chrome-style runtime grant. Firefox for Android has no
+ * runtime prompt either — site access is toggled on the add-on's details
+ * page — so we only test, never request. */
 async function ensureXPermission(): Promise<boolean> {
   if (import.meta.env.SAFARI) return true;
+  if (isFirefoxAndroid()) {
+    try {
+      return await chrome.permissions.contains({ origins: X_ORIGINS });
+    } catch {
+      return false;
+    }
+  }
   try {
     if (await chrome.permissions.contains({ origins: X_ORIGINS })) return true;
     return await chrome.permissions.request({ origins: X_ORIGINS });
@@ -1683,7 +1701,9 @@ function Settings() {
             )}
             {permDenied && (
               <p className="mt-2 text-[12px] text-danger">
-                未授权访问 x.com，已保持当前设置。X 静音 / 拉黑需要该权限才能调用 X 接口。
+                {isFirefoxAndroid()
+                  ? "未授权访问 x.com，已保持当前设置。请在 Firefox 附加组件详情页手动授予站点权限：菜单 → 附加组件 → Make X Great Again → 权限，开启 x.com 与 twitter.com 的访问后再试。"
+                  : "未授权访问 x.com，已保持当前设置。X 静音 / 拉黑需要该权限才能调用 X 接口。"}
               </p>
             )}
           </section>
