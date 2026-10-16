@@ -10,11 +10,32 @@ This is **not** a general-purpose reputation system, political tool, or
 arbitrary blacklist. It is narrowly scoped to the exact threat model defined
 in [GOVERNANCE.md](./GOVERNANCE.md).
 
+## September 1, 2026 blacklist cleanup
+
+By September 1, the live blacklist had grown to 223,670 entries. False
+positives from AI verdicts and later bulk human confirmations were degrading
+normal browsing, so we performed a two-stage, auditable cleanup:
+
+1. We moved all 21,827 entries whose publication tier was `ai` out of the
+   current blacklist and disabled direct AI publication.
+2. We then rescanned all 201,912 current blacklist rows with the 72 blacklist
+   rules enabled at the time. We retained only the 171,754 rows that still
+   matched a rule in their persisted handle, display name, or evidence text,
+   and moved the other 30,158 rows—including 28,560 historical human/bulk
+   confirmations—to the recoverable `removed` state.
+
+A second full scan after the operation found zero non-rule matches among the
+171,754 remaining rows. Neither stage modified the whitelist; it contained
+2,338 entries immediately before and after stage two. Historical account rows,
+evidence, and mirror commits remain available as the audit trail. Current API,
+R2, and `data-mirror` artifacts represent the cleaned list. New AI verdicts
+remain review-only and cannot publish directly.
+
 ## Where the data lives
 
 | Source | Path / endpoint | Freshness |
 |---|---|---|
-| In-repo snapshot (audit) | [`data/blacklist/v1.json`](./data/blacklist/v1.json), [`data/whitelist/v1.json`](./data/whitelist/v1.json) | mirrored from D1 every 6 hours (diff-aware; git history = audit log) |
+| In-repo snapshot (audit) | [`data/blacklist/v1.json`](https://github.com/foru17/make-x-great-again/blob/data-mirror/data/blacklist/v1.json), [`data/whitelist/v1.json`](https://github.com/foru17/make-x-great-again/blob/data-mirror/data/whitelist/v1.json) — on the [`data-mirror`](https://github.com/foru17/make-x-great-again/tree/data-mirror/data) branch | mirrored from D1 every 6 hours (diff-aware; git history = audit log). Since 2026-08-03 the mirror writes to the dedicated `data-mirror` branch so automated data commits never race code work on `main`; the `data/` copy on `main` is a frozen snapshot from that date. |
 | Live API | `https://x.zuoluo.tv/v1/list` (paginated), `/v1/whitelist` | real-time, edge-cached |
 | Published artifacts (R2) | `https://x.zuoluo.tv/v1/list/meta` → `/v1/artifacts/<key>` | republished every 10 minutes; version changes only when content changes |
 
@@ -99,8 +120,13 @@ Returns full records including `reasons`, `evidence_text` and `reporters`.
 ### 5. Full in-repo snapshot (audit)
 
 ```bash
-curl -sL https://raw.githubusercontent.com/foru17/make-x-great-again/main/data/blacklist/v1.json
+curl -sL https://raw.githubusercontent.com/foru17/make-x-great-again/data-mirror/data/blacklist/v1.json
 ```
+
+> **Branch note**: the live snapshot lives on the **`data-mirror`** branch
+> (updated every 6 hours). The `data/` directory on `main` stopped updating
+> on 2026-08-03 and is kept only as a frozen historical snapshot — don't
+> read it expecting fresh data.
 
 > **Size warning**: `data/blacklist/v1.json` is currently ~18 MB and growing —
 > near jsDelivr's 20 MB per-file limit, so **do not rely on jsDelivr for the

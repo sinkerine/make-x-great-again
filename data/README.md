@@ -1,10 +1,40 @@
 # MXGA · 公开数据集
 
+> 📍 **实时数据在 [`data-mirror` 分支](https://github.com/foru17/make-x-great-again/tree/data-mirror/data)，服务端每 6 小时自动同步，公开承诺不变。**
+>
+> `main` 上的本目录只保留这份指路 README：数据同步 2026-08-03 起独立到专用
+> 数据分支（自动数据提交每天几十次，和 `main` 上的代码开发相互覆盖、淹没代码
+> history），`main` 上残留的 2026-08-03 冻结快照又多次被误读成"名单停更了"，
+> 因此 2026-08-14 起把过期快照从 `main` 移除。**`data-mirror` 分支的 git
+> history 就是完整审计日志**，任何人 clone 即可复现每一次名单变更。
+>
+> 直接读取最新数据：
+> - 黑名单全量：`https://raw.githubusercontent.com/foru17/make-x-great-again/data-mirror/data/blacklist/v1.json`
+> - 黑名单 lite（扩展同款产物）：`https://raw.githubusercontent.com/foru17/make-x-great-again/data-mirror/data/blacklist/v2-lite.json`
+> - 白名单：`https://raw.githubusercontent.com/foru17/make-x-great-again/data-mirror/data/whitelist/v1.json`
+
 > 这个目录是 MXGA 服务端**自动生成**的公开数据快照。
 > 通过 Cloudflare Worker 的定时任务（每 6 小时）从 D1 数据库导出 →
-> 用 GitHub Contents API 写入这里。git history 即审计日志。
+> 用 GitHub Contents API 写入 `data-mirror` 分支。git history 即审计日志。
 
 完整治理规则：[GOVERNANCE.md](../GOVERNANCE.md) · 隐私承诺：[docs/PRIVACY.md](../docs/PRIVACY.md)
+
+---
+
+## 2026-09-01 黑名单清理说明
+
+截至 2026-09-01，线上黑名单已累积到 223,670 条。AI 自动判定和后续人工批量确认中
+出现了会影响正常浏览的误伤，因此当天分两阶段做了可审计清理：
+
+1. 先将全部 21,827 条 `published_tier='ai'` 记录移出当前黑名单，并关闭 AI 直接上榜；
+2. 再用当时启用的 72 条 blacklist 规则重新扫描全部 201,912 条当前黑名单记录。
+   只保留仍能在持久化的 handle、显示名或触发文本中命中规则的 171,754 条，
+   将其余 30,158 条（包括 28,560 条历史人工批量确认记录）移到可恢复的 `removed` 状态。
+
+第二阶段完成时再次全量扫描，171,754 条剩余记录全部命中规则，未命中数为 0。
+两阶段均未修改白名单；第二阶段清理前后白名单均为 2,338 条。历史账号行、原始证据和
+`data-mirror` commit 继续保留作为审计记录；实时 API、R2 产物和本分支最新快照反映
+清理后的当前名单。新 AI 判定继续只进入待审队列，不会直接进入公开黑名单。
 
 ---
 
@@ -147,8 +177,8 @@ curl "https://cdn.jsdelivr.net/gh/foru17/make-x-great-again@latest/public-list/d
 
 ```bash
 # 最稳的入口（GitHub raw）
-curl https://raw.githubusercontent.com/foru17/make-x-great-again/main/data/blacklist/v1.json
-curl https://raw.githubusercontent.com/foru17/make-x-great-again/main/data/whitelist/v1.json
+curl https://raw.githubusercontent.com/foru17/make-x-great-again/data-mirror/data/blacklist/v1.json
+curl https://raw.githubusercontent.com/foru17/make-x-great-again/data-mirror/data/whitelist/v1.json
 ```
 
 ### 或者用我们的 Worker（带 CDN 缓存）

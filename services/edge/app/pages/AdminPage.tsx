@@ -1,7 +1,6 @@
 import { Lock, ShieldCheck } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
-import { AgentTab } from "@/components/admin/AgentTab";
 import { BlacklistTab } from "@/components/admin/BlacklistTab";
 import { ConfirmProvider } from "@/components/admin/confirm";
 import { LogTab } from "@/components/admin/LogTab";
@@ -63,22 +62,37 @@ const TABS = [
   { v: "queue", label: "待审队列", count: (s: Stats) => s.queue },
   { v: "blacklist", label: "黑名单", count: (s: Stats) => s.blacklist },
   { v: "whitelist", label: "白名单", count: (s: Stats) => s.whitelist },
-  { v: "wlRequests", label: "白名单申请", count: null },
-  { v: "agentPending", label: "🤖 待定", count: (s: Stats) => s.agent_pending },
-  { v: "agentBL", label: "🤖 拟拉黑", count: (s: Stats) => s.agent_blacklist },
-  { v: "agentWL", label: "🤖 拟加白", count: (s: Stats) => s.agent_whitelist },
+  { v: "wlRequests", label: "白名单申请", count: (s: Stats) => s.whitelist_requests ?? 0 },
   { v: "rules", label: "关键字规则", count: null },
   { v: "log", label: "审计日志", count: null },
 ];
 
+const LEGACY_REVIEW_STAGES: Record<string, string> = { agentPending: "pending", agentBL: "blacklist", agentWL: "whitelist" };
+
 function Console({ onAuth }: { onAuth: () => void }) {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [initialReviewStage, setInitialReviewStage] = useState(() => LEGACY_REVIEW_STAGES[location.hash.slice(1)] ?? "");
   const [tab, setTab] = useState(() => {
     const h = typeof location !== "undefined" ? location.hash.replace("#", "") : "";
     return TABS.some((t) => t.v === h) ? h : "queue";
   });
 
+  useEffect(() => {
+    const navigate = () => {
+      const hash = location.hash.slice(1);
+      const stage = LEGACY_REVIEW_STAGES[hash];
+      if (stage || hash === "queue") {
+        setInitialReviewStage(stage ?? "");
+        setTab("queue");
+      } else if (TABS.some((t) => t.v === hash)) setTab(hash);
+    };
+    window.addEventListener("hashchange", navigate);
+    return () => window.removeEventListener("hashchange", navigate);
+  }, []);
+
+  const lastStatsAt = useRef(0);
   const refreshStats = useCallback(() => {
+    lastStatsAt.current = Date.now();
     api
       .stats()
       .then(setStats)
@@ -87,13 +101,36 @@ function Console({ onAuth }: { onAuth: () => void }) {
       });
   }, [onAuth]);
 
+  // Every stats call costs D1 rows-read, so only poll while the tab is
+  // visible, back off to 5 min, and coalesce bursts of decisions into one
+  // refresh. A forgotten background tab polling every 60s was ~97% of the
+  // 2026-09 D1 bill.
   useEffect(() => {
     refreshStats();
-    const id = setInterval(refreshStats, 60000);
-    return () => clearInterval(id);
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") refreshStats();
+    }, 5 * 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && Date.now() - lastStatsAt.current > 60_000)
+        refreshStats();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [refreshStats]);
 
-  const tabProps = { onAuth, onMutated: refreshStats };
+  const mutatedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onMutated = useCallback(() => {
+    if (mutatedTimer.current) clearTimeout(mutatedTimer.current);
+    mutatedTimer.current = setTimeout(refreshStats, 3000);
+  }, [refreshStats]);
+  useEffect(() => () => {
+    if (mutatedTimer.current) clearTimeout(mutatedTimer.current);
+  }, []);
+
+  const tabProps = { onAuth, onMutated };
 
   return (
     <div className="mx-auto max-w-[1200px] px-5 py-6 pb-20 sm:px-7">
@@ -129,9 +166,13 @@ function Console({ onAuth }: { onAuth: () => void }) {
       </header>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="mb-5 h-auto flex-wrap justify-start gap-1 bg-muted/60 p-1">
+        {/* The shadcn TabsList pins a 36px height on horizontal orientation,
+            which a plain `h-auto` can't override (different variant group), so
+            a wrapped 3-row tab list on mobile spilled over the page title.
+            Override the orientation-scoped height, not the base one. */}
+        <TabsList className="mb-5 h-auto flex-wrap justify-start gap-1 bg-muted/60 p-1 group-data-[orientation=horizontal]/tabs:h-auto">
           {TABS.map((t) => (
-            <TabsTrigger key={t.v} value={t.v} className="data-[state=active]:bg-card">
+            <TabsTrigger key={t.v} value={t.v} className="h-8 flex-none data-[state=active]:bg-card">
               {t.label}
               {t.count && stats && (
                 <span className="ml-1.5 text-[11px] tabular-nums text-muted-foreground">
@@ -142,13 +183,10 @@ function Console({ onAuth }: { onAuth: () => void }) {
           ))}
         </TabsList>
 
-        <TabsContent value="queue"><QueueTab {...tabProps} /></TabsContent>
+        <TabsContent value="queue"><QueueTab key={initialReviewStage} initialReviewStage={initialReviewStage} {...tabProps} /></TabsContent>
         <TabsContent value="blacklist"><BlacklistTab {...tabProps} /></TabsContent>
         <TabsContent value="whitelist"><WhitelistTab {...tabProps} /></TabsContent>
         <TabsContent value="wlRequests"><WhitelistRequestsTab {...tabProps} /></TabsContent>
-        <TabsContent value="agentPending"><AgentTab bucket="pending" {...tabProps} /></TabsContent>
-        <TabsContent value="agentBL"><AgentTab bucket="blacklist" {...tabProps} /></TabsContent>
-        <TabsContent value="agentWL"><AgentTab bucket="whitelist" {...tabProps} /></TabsContent>
         <TabsContent value="rules"><RulesTab {...tabProps} /></TabsContent>
         <TabsContent value="log"><LogTab onAuth={onAuth} /></TabsContent>
       </Tabs>
